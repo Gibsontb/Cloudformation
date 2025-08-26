@@ -1,0 +1,77 @@
+# author: TGibson
+# creation date: 2025-08-26
+# CloudFormation YAML Template
+# job title: appconfig-featureflags
+AWSTemplateFormatVersion: "2010-09-09"
+    Description: AWS AppConfig application with a sample hosted configuration.
+    Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, stage, prod]
+    Default: dev
+    Description: Deployment environment.
+  ProjectName:
+    Type: String
+    Default: CorePlatform
+    AllowedPattern: '^[a-zA-Z0-9\-]{1,32}$'
+    Description: Project short code (letters/digits/hyphen).
+  Owner:
+    Type: String
+    Default: tgibson@omgroup.example
+    Description: Service owner (email or team).
+  CostCenter:
+    Type: String
+    Default: CC-0000
+    AllowedPattern: '^[A-Za-z0-9\-]{1,32}$'
+    Description: Cost center or charge code.
+  DataClassification:
+    Type: String
+    Default: Internal
+    AllowedValues: [Public, Internal, Confidential, Restricted]
+    Description: Data classification level.
+Resources:
+    AppConfig:
+  Type: AWS::Logs::LogGroup
+  Properties:
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/AppConfig"
+    RetentionInDays: 30
+    Tags:
+      - Key: Project       ; Value: !Ref ProjectName
+      - Key: Environment   ; Value: !Ref Environment
+      - Key: Owner         ; Value: !Ref Owner
+      - Key: CostCenter    ; Value: !Ref CostCenter
+      - Key: DataClass     ; Value: !Ref DataClassification
+      - Key: Author        ; Value: "TGibson"
+
+
+      App:
+        Type: AWS::AppConfig::Application
+        Properties:
+          Name: !Sub "${ProjectName}-${Environment}"
+          Description: "AppConfig app"
+      Env:
+        Type: AWS::AppConfig::Environment
+        Properties:
+          Name: !Ref Environment
+          ApplicationId: !Ref App
+      Profile:
+        Type: AWS::AppConfig::ConfigurationProfile
+        Properties:
+          ApplicationId: !Ref App
+          Name: flags
+          LocationUri: hosted
+      HostedCfg:
+        Type: AWS::AppConfig::HostedConfigurationVersion
+        Properties:
+          ApplicationId: !Ref App
+          ConfigurationProfileId: !Ref Profile
+          ContentType: application/json
+          Content: '{"featureA":true,"rollout":"100%"}'
+      Deployment:
+        Type: AWS::AppConfig::Deployment
+        Properties:
+          ApplicationId: !Ref App
+          ConfigurationProfileId: !Ref Profile
+          ConfigurationVersion: !Ref HostedCfg
+          DeploymentStrategyId: AppConfig.AllAtOnce
+          EnvironmentId: !Ref Env

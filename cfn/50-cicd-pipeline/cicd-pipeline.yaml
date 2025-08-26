@@ -1,0 +1,106 @@
+# author: TGibson
+# creation date: 2025-08-26
+# CloudFormation YAML Template
+# job title: cicd-pipeline
+AWSTemplateFormatVersion: "2010-09-09"
+    Description: CodePipeline skeleton (off by default).
+    Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, stage, prod]
+    Default: dev
+    Description: Deployment environment.
+  ProjectName:
+    Type: String
+    Default: CorePlatform
+    AllowedPattern: '^[a-zA-Z0-9\-]{1,32}$'
+    Description: Project short code (letters/digits/hyphen).
+  Owner:
+    Type: String
+    Default: tgibson@omgroup.example
+    Description: Service owner (email or team).
+  CostCenter:
+    Type: String
+    Default: CC-0000
+    AllowedPattern: '^[A-Za-z0-9\-]{1,32}$'
+    Description: Cost center or charge code.
+  DataClassification:
+    Type: String
+    Default: Internal
+    AllowedValues: [Public, Internal, Confidential, Restricted]
+    Description: Data classification level.
+Parameters:
+      CreatePipeline:
+        Type: String
+        AllowedValues: ["true","false"]
+        Default: "false"
+      RepoConnectionArn:
+        Type: String
+        Default: arn:aws:codestar-connections:region:123456789012:connection/abc
+      RepoId:
+        Type: String
+        Default: "owner/repo"
+      Branch:
+        Type: String
+        Default: main
+
+    Conditions:
+      DoPipe: !Equals [!Ref CreatePipeline, "true"]
+
+    Resources:
+    CiCd:
+  Type: AWS::Logs::LogGroup
+  Properties:
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/CiCd"
+    RetentionInDays: 30
+    Tags:
+      - Key: Project       ; Value: !Ref ProjectName
+      - Key: Environment   ; Value: !Ref Environment
+      - Key: Owner         ; Value: !Ref Owner
+      - Key: CostCenter    ; Value: !Ref CostCenter
+      - Key: DataClass     ; Value: !Ref DataClassification
+      - Key: Author        ; Value: "TGibson"
+
+
+      ArtifactBucket:
+        Condition: DoPipe
+        Type: AWS::S3::Bucket
+        Properties:
+          VersioningConfiguration: { Status: Enabled }
+          BucketEncryption:
+            ServerSideEncryptionConfiguration:
+              - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+
+      PipelineRole:
+        Condition: DoPipe
+        Type: AWS::IAM::Role
+        Properties:
+          AssumeRolePolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Principal: { Service: codepipeline.amazonaws.com }
+                Action: "sts:AssumeRole"
+
+      Pipeline:
+        Condition: DoPipe
+        Type: AWS::CodePipeline::Pipeline
+        Properties:
+          RoleArn: !GetAtt PipelineRole.Arn
+          ArtifactStore:
+            Type: S3
+            Location: !Ref ArtifactBucket
+          Stages:
+            - Name: Source
+              Actions:
+                - Name: GitHub
+                  ActionTypeId:
+                    Category: Source
+                    Owner: AWS
+                    Provider: CodeStarSourceConnection
+                    Version: "1"
+                  OutputArtifacts: [{ Name: SourceOutput }]
+                  Configuration:
+                    ConnectionArn: !Ref RepoConnectionArn
+                    FullRepositoryId: !Ref RepoId
+                    BranchName: !Ref Branch

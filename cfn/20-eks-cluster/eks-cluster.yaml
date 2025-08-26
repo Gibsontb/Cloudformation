@@ -1,0 +1,78 @@
+# author: TGibson
+# creation date: 2025-08-26
+# CloudFormation YAML Template
+# job title: eks-cluster
+AWSTemplateFormatVersion: "2010-09-09"
+    Description: EKS cluster skeleton (creation disabled by default to avoid cost).
+    Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, stage, prod]
+    Default: dev
+    Description: Deployment environment.
+  ProjectName:
+    Type: String
+    Default: CorePlatform
+    AllowedPattern: '^[a-zA-Z0-9\-]{1,32}$'
+    Description: Project short code (letters/digits/hyphen).
+  Owner:
+    Type: String
+    Default: tgibson@omgroup.example
+    Description: Service owner (email or team).
+  CostCenter:
+    Type: String
+    Default: CC-0000
+    AllowedPattern: '^[A-Za-z0-9\-]{1,32}$'
+    Description: Cost center or charge code.
+  DataClassification:
+    Type: String
+    Default: Internal
+    AllowedValues: [Public, Internal, Confidential, Restricted]
+    Description: Data classification level.
+Parameters:
+      SubnetIds:
+        Type: List<AWS::EC2::Subnet::Id>
+        Description: Private subnet IDs for EKS.
+      CreateEKS:
+        Type: String
+        AllowedValues: ["true","false"]
+        Default: "false"
+
+    Conditions:
+      DoEKS: !Equals [!Ref CreateEKS, "true"]
+
+    Resources:
+    EksCluster:
+  Type: AWS::Logs::LogGroup
+  Properties:
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/EksCluster"
+    RetentionInDays: 30
+    Tags:
+      - Key: Project       ; Value: !Ref ProjectName
+      - Key: Environment   ; Value: !Ref Environment
+      - Key: Owner         ; Value: !Ref Owner
+      - Key: CostCenter    ; Value: !Ref CostCenter
+      - Key: DataClass     ; Value: !Ref DataClassification
+      - Key: Author        ; Value: "TGibson"
+
+
+      EksRole:
+        Type: AWS::IAM::Role
+        Properties:
+          AssumeRolePolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Principal: { Service: eks.amazonaws.com }
+                Action: "sts:AssumeRole"
+          ManagedPolicyArns:
+            - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+
+      EksCluster:
+        Condition: DoEKS
+        Type: AWS::EKS::Cluster
+        Properties:
+          Name: !Sub "${ProjectName}-${Environment}"
+          RoleArn: !GetAtt EksRole.Arn
+          ResourcesVpcConfig:
+            SubnetIds: !Ref SubnetIds

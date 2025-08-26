@@ -1,0 +1,82 @@
+# author: TGibson
+# creation date: 2025-08-26
+# CloudFormation YAML Template
+# job title: cost-tagging
+AWSTemplateFormatVersion: "2010-09-09"
+    Description: Cost & tagging skeleton (Budgets + required tags rule).
+    Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, stage, prod]
+    Default: dev
+    Description: Deployment environment.
+  ProjectName:
+    Type: String
+    Default: CorePlatform
+    AllowedPattern: '^[a-zA-Z0-9\-]{1,32}$'
+    Description: Project short code (letters/digits/hyphen).
+  Owner:
+    Type: String
+    Default: tgibson@omgroup.example
+    Description: Service owner (email or team).
+  CostCenter:
+    Type: String
+    Default: CC-0000
+    AllowedPattern: '^[A-Za-z0-9\-]{1,32}$'
+    Description: Cost center or charge code.
+  DataClassification:
+    Type: String
+    Default: Internal
+    AllowedValues: [Public, Internal, Confidential, Restricted]
+    Description: Data classification level.
+Parameters:
+      BudgetAmountUSD:
+        Type: Number
+        Default: 100
+      Email:
+        Type: String
+        Default: finops@example.com
+
+    Resources:
+    CostTagging:
+  Type: AWS::Logs::LogGroup
+  Properties:
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/CostTagging"
+    RetentionInDays: 30
+    Tags:
+      - Key: Project       ; Value: !Ref ProjectName
+      - Key: Environment   ; Value: !Ref Environment
+      - Key: Owner         ; Value: !Ref Owner
+      - Key: CostCenter    ; Value: !Ref CostCenter
+      - Key: DataClass     ; Value: !Ref DataClassification
+      - Key: Author        ; Value: "TGibson"
+
+
+      Budget:
+        Type: AWS::Budgets::Budget
+        Properties:
+          Budget:
+            BudgetName: !Sub "${ProjectName}-${Environment}-monthly"
+            BudgetLimit: { Amount: !Ref BudgetAmountUSD, Unit: USD }
+            TimeUnit: MONTHLY
+            BudgetType: COST
+          NotificationsWithSubscribers:
+            - Notification:
+                NotificationType: ACTUAL
+                ComparisonOperator: GREATER_THAN
+                Threshold: 80
+              Subscribers:
+                - SubscriptionType: EMAIL
+                  Address: !Ref Email
+
+      RequiredTagsRule:
+        Type: AWS::Config::ConfigRule
+        Properties:
+          ConfigRuleName: required-tags
+          Source:
+            Owner: AWS
+            SourceIdentifier: REQUIRED_TAGS
+          InputParameters:
+            tag1Key: Project
+            tag2Key: Environment
+            tag3Key: Owner

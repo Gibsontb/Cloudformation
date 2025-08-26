@@ -1,0 +1,105 @@
+# author: TGibson
+# creation date: 2025-08-26
+# CloudFormation YAML Template
+# job title: serverless-api
+AWSTemplateFormatVersion: "2010-09-09"
+    Description: Serverless API skeleton (off by default).
+    Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, stage, prod]
+    Default: dev
+    Description: Deployment environment.
+  ProjectName:
+    Type: String
+    Default: CorePlatform
+    AllowedPattern: '^[a-zA-Z0-9\-]{1,32}$'
+    Description: Project short code (letters/digits/hyphen).
+  Owner:
+    Type: String
+    Default: tgibson@omgroup.example
+    Description: Service owner (email or team).
+  CostCenter:
+    Type: String
+    Default: CC-0000
+    AllowedPattern: '^[A-Za-z0-9\-]{1,32}$'
+    Description: Cost center or charge code.
+  DataClassification:
+    Type: String
+    Default: Internal
+    AllowedValues: [Public, Internal, Confidential, Restricted]
+    Description: Data classification level.
+Parameters:
+      CreateServerless:
+        Type: String
+        AllowedValues: ["true","false"]
+        Default: "false"
+
+    Conditions:
+      DoSrv: !Equals [!Ref CreateServerless, "true"]
+
+    Resources:
+    ServerlessApi:
+  Type: AWS::Logs::LogGroup
+  Properties:
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/ServerlessApi"
+    RetentionInDays: 30
+    Tags:
+      - Key: Project       ; Value: !Ref ProjectName
+      - Key: Environment   ; Value: !Ref Environment
+      - Key: Owner         ; Value: !Ref Owner
+      - Key: CostCenter    ; Value: !Ref CostCenter
+      - Key: DataClass     ; Value: !Ref DataClassification
+      - Key: Author        ; Value: "TGibson"
+
+
+      LambdaRole:
+        Type: AWS::IAM::Role
+        Properties:
+          AssumeRolePolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Principal: { Service: lambda.amazonaws.com }
+                Action: "sts:AssumeRole"
+          ManagedPolicyArns:
+            - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+      HelloFn:
+        Condition: DoSrv
+        Type: AWS::Lambda::Function
+        Properties:
+          Runtime: python3.11
+          Handler: index.handler
+          Role: !GetAtt LambdaRole.Arn
+          Code:
+            ZipFile: |
+              def handler(event, context):
+                  return {"statusCode": 200, "body": "ok"}
+
+      Api:
+        Condition: DoSrv
+        Type: AWS::ApiGateway::RestApi
+        Properties:
+          Name: !Sub "${ProjectName}-${Environment}-api"
+
+      RootMethod:
+        Condition: DoSrv
+        Type: AWS::ApiGateway::Method
+        Properties:
+          HttpMethod: GET
+          ResourceId: !GetAtt Api.RootResourceId
+          RestApiId: !Ref Api
+          AuthorizationType: NONE
+          Integration:
+            Type: AWS_PROXY
+            IntegrationHttpMethod: POST
+            Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${HelloFn.Arn}/invocations"
+
+      PermissionInvoke:
+        Condition: DoSrv
+        Type: AWS::Lambda::Permission
+        Properties:
+          Action: lambda:InvokeFunction
+          FunctionName: !Ref HelloFn
+          Principal: apigateway.amazonaws.com

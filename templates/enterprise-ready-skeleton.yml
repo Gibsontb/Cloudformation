@@ -1,0 +1,335 @@
+# author: TGibson
+# creation date: 2025-08-26
+# CloudFormation YAML Template
+# job title: Solutions Architect
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Enterprise CloudFormation baseline with strong defaults (encryption, logging, tagging),
+  parameter validation, optional nested stacks, exports, and production safeguards.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# UI polish in the console: groups & labels for parameters
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "Environment & Project" }
+        Parameters: [Environment, ProjectName, Owner, CostCenter, DataClassification]
+      - Label: { default: "Networking" }
+        Parameters: [VpcId, SubnetIds]
+      - Label: { default: "Security & Encryption" }
+        Parameters: [EnableKms, KmsKeyArn, CloudWatchLogRetentionDays]
+      - Label: { default: "S3 Settings" }
+        Parameters: [S3BucketNameSuffix, S3SseMode]
+    ParameterLabels:
+      Environment: { default: "Environment (dev/test/stage/prod)" }
+      ProjectName: { default: "Project Name" }
+      Owner: { default: "Owner (email or team)" }
+      CostCenter: { default: "Cost Center" }
+      DataClassification: { default: "Data Classification" }
+      VpcId: { default: "Existing VPC ID" }
+      SubnetIds: { default: "Private Subnet IDs (List)" }
+      EnableKms: { default: "Use Customer-Managed KMS?" }
+      KmsKeyArn: { default: "KMS Key ARN (if enabled)" }
+      CloudWatchLogRetentionDays: { default: "CloudWatch Log Retention (days)" }
+      S3BucketNameSuffix: { default: "S3 Bucket Name Suffix" }
+      S3SseMode: { default: "S3 Encryption Mode" }
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters (flexible, org-standardized)
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, stage, prod]
+    Default: dev
+    Description: Deployment environment.
+
+  ProjectName:
+    Type: String
+    Default: CorePlatform
+    AllowedPattern: '^[a-zA-Z0-9\-]{1,32}$'
+    Description: Short project code used in names and tags (max 32 chars, letters/digits/hyphen).
+
+  Owner:
+    Type: String
+    Default: tgibson@omgroup.example
+    Description: Service owner (email or team).
+
+  CostCenter:
+    Type: String
+    Default: CC-0000
+    AllowedPattern: '^[A-Za-z0-9\-]{1,32}$'
+    Description: Cost center or charge code.
+
+  DataClassification:
+    Type: String
+    Default: Internal
+    AllowedValues: [Public, Internal, Confidential, Restricted]
+    Description: Data classification level.
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Existing VPC where resources will reside.
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private subnet IDs for workload placement.
+
+  EnableKms:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Whether to use a customer-managed KMS key for encryption.
+
+  KmsKeyArn:
+    Type: String
+    Default: ""
+    Description: ARN of CMK to use when EnableKms=true.
+    AllowedPattern: '^$|^arn:aws:kms:[a-z0-9-]+:\d{12}:key/[0-9a-fA-F-]+$'
+
+  CloudWatchLogRetentionDays:
+    Type: Number
+    Default: 90
+    AllowedValues: [1,3,5,7,14,30,60,90,120,150,180,365,400,545,731,1827,3653]
+    Description: Retention for CloudWatch Log Groups.
+
+  S3BucketNameSuffix:
+    Type: String
+    Default: artifacts
+    AllowedPattern: '^[a-z0-9-]{3,50}$'
+    Description: Lowercase suffix appended to stack name to form unique bucket.
+
+  S3SseMode:
+    Type: String
+    Default: SSE-S3
+    AllowedValues: [SSE-S3, SSE-KMS]
+    Description: Server-side encryption mode for S3 bucket objects.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Optional: Macros / SAM (uncomment if you use them)
+# Transform: AWS::Serverless-2016-10-31
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Static maps (ex: AMIs per region) — fill with your org’s IDs if desired
+Mappings:
+  RegionAmiMap:
+    us-east-1: { AL2: "ami-fffffffffffffffff" }
+    us-east-2: { AL2: "ami-eeeeeeeeeeeeeeeee" }
+    us-west-2: { AL2: "ami-ddddddddddddddddd" }
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameter Rules (advanced validation)
+Rules:
+  RequireKmsArnWhenEnabled:
+    Assertions:
+      - Assert: !Or
+          - !Equals [!Ref EnableKms, "false"]
+          - !Not [!Equals [!Ref KmsKeyArn, ""]]
+        AssertDescription: "When EnableKms is true, KmsKeyArn must be provided."
+  EnforceProdGuardrails:
+    Assertions:
+      - Assert: !Or
+          - !Not [!Equals [!Ref Environment, "prod"]]
+          - !And
+            - !Equals [!Ref Environment, "prod"]
+            - !Not [!Equals [!Ref S3SseMode, "SSE-S3"]]
+        AssertDescription: "In prod, require SSE-KMS for S3."
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Conditions to toggle optional/variant resources
+Conditions:
+  IsProd: !Equals [!Ref Environment, "prod"]
+  UseKms: !Equals [!Ref EnableKms, "true"]
+  UseS3Kms: !And [!Condition UseKms, !Equals [!Ref S3SseMode, "SSE-KMS"]]
+  UseS3SseS3: !Equals [!Ref S3SseMode, "SSE-S3"]
+  CreateObservability: "true"   # flip to a real condition or parameter if needed
+  CreateNestedNetwork: "false"  # set to true to demo nested stack pattern
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources — secure, tagged, and enterprise-ready examples
+Resources:
+
+  # Central log group for app/system logs with org retention & KMS if enabled
+  AppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/${ProjectName}/${Environment}/core"
+      RetentionInDays: !Ref CloudWatchLogRetentionDays
+      KmsKeyId: !If [UseKms, !Ref KmsKeyArn, !Ref "AWS::NoValue"]
+      Tags:
+        - Key: Project       ; Value: !Ref ProjectName
+        - Key: Environment   ; Value: !Ref Environment
+        - Key: Owner         ; Value: !Ref Owner
+        - Key: CostCenter    ; Value: !Ref CostCenter
+        - Key: DataClass     ; Value: !Ref DataClassification
+        - Key: Author        ; Value: "TGibson"
+
+  # Example: Artifacts / data bucket — fully locked down, encrypted, private
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-${S3BucketNameSuffix}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - !If
+            - UseS3Kms
+            - { ServerSideEncryptionByDefault: { SSEAlgorithm: aws:kms, KMSMasterKeyID: !Ref KmsKeyArn } }
+            - { ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      LoggingConfiguration:
+        # NOTE: Point this to a central logging bucket if you have one
+        # DestinationBucketName: !Ref CentralLogsBucket
+        # LogFilePrefix: !Sub "${AWS::StackName}/s3/"
+        # (left unset here to avoid cross-bucket dependency)
+      Tags:
+        - Key: Project       ; Value: !Ref ProjectName
+        - Key: Environment   ; Value: !Ref Environment
+        - Key: Owner         ; Value: !Ref Owner
+        - Key: CostCenter    ; Value: !Ref CostCenter
+        - Key: DataClass     ; Value: !Ref DataClassification
+        - Key: Author        ; Value: "TGibson"
+
+  # S3 bucket policy to enforce TLS, deny non-TLS, and (optionally) require KMS
+  ArtifactsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "${ArtifactsBucket.Arn}/*"
+              - !GetAtt ArtifactsBucket.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - !If
+            - UseS3Kms
+            - {
+                Sid: "DenyUnEncryptedUploads",
+                Effect: "Deny",
+                Principal: "*",
+                Action: "s3:PutObject",
+                Resource: !Sub "${ArtifactsBucket.Arn}/*",
+                Condition:
+                  StringNotEquals:
+                    s3:x-amz-server-side-encryption: "aws:kms"
+              }
+            - { Ref: "AWS::NoValue" }
+
+  # Example IAM role with least privilege + tagging standard
+  AppExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-exec"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+                - lambda.amazonaws.com
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: app-inline
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Logs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+              - Sid: ReadArtifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ArtifactsBucket.Arn
+                  - !Sub "${ArtifactsBucket.Arn}/*"
+      Tags:
+        - Key: Project       ; Value: !Ref ProjectName
+        - Key: Environment   ; Value: !Ref Environment
+        - Key: Owner         ; Value: !Ref Owner
+        - Key: CostCenter    ; Value: !Ref CostCenter
+        - Key: DataClass     ; Value: !Ref DataClassification
+        - Key: Author        ; Value: "TGibson"
+
+  # Optional nested stack stub (set CreateNestedNetwork to true to use)
+  NetworkNested:
+    Condition: CreateNestedNetwork
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      # Replace with your S3 URL to a vetted network template
+      TemplateURL: https://s3.amazonaws.com/example-bucket/network-template.yaml
+      Parameters:
+        Environment: !Ref Environment
+        ProjectName: !Ref ProjectName
+
+  # (Pattern) Example EC2 instance using region map & private subnets
+  # NOTE: Commented out to avoid charges by default; enable when needed.
+  # AppInstance:
+  #   Type: AWS::EC2::Instance
+  #   Properties:
+  #     ImageId: !FindInMap [RegionAmiMap, !Ref "AWS::Region", AL2]
+  #     InstanceType: t3.micro
+  #     SubnetId: !Select [0, !Ref SubnetIds]
+  #     IamInstanceProfile: !Ref AppInstanceProfile
+  #     Monitoring: true
+  #     Tags:
+  #       - Key: Name          ; Value: !Sub "${ProjectName}-${Environment}-app"
+  #       - Key: Project       ; Value: !Ref ProjectName
+  #       - Key: Environment   ; Value: !Ref Environment
+  #       - Key: Owner         ; Value: !Ref Owner
+  #       - Key: CostCenter    ; Value: !Ref CostCenter
+  #       - Key: DataClass     ; Value: !Ref DataClassification
+  #       - Key: Author        ; Value: "TGibson"
+
+  # (Pattern) Instance profile for EC2 (if you enable AppInstance above)
+  AppInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref AppExecutionRole]
+      InstanceProfileName: !Sub "${ProjectName}-${Environment}-ip"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs (with exports so other stacks can import values)
+Outputs:
+  OutProject:
+    Description: Project code
+    Value: !Ref ProjectName
+    Export: { Name: !Sub "${AWS::StackName}-ProjectName" }
+
+  OutEnvironment:
+    Description: Environment
+    Value: !Ref Environment
+    Export: { Name: !Sub "${AWS::StackName}-Environment" }
+
+  OutArtifactsBucketName:
+    Description: S3 artifacts bucket name
+    Value: !Ref ArtifactsBucket
+    Export: { Name: !Sub "${AWS::StackName}-ArtifactsBucket" }
+
+  OutAppLogGroup:
+    Description: Central Log Group name
+    Value: !Ref AppLogGroup
+    Export: { Name: !Sub "${AWS::StackName}-LogGroup" }

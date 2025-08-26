@@ -1,0 +1,9 @@
+{
+  "Parameters": {
+    "Environment": "prod",
+    "ProjectName": "CorePlatform",
+    "Owner": "tgibson@omgroup.example",
+    "CostCenter": "CC-1234",
+    "DataClassification": "Restricted"
+  }
+}

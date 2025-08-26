@@ -1,0 +1,15 @@
+{
+  "Statement": [
+    {
+      "Sid": "ProtectS3AndLogsFromAccidentalUpdate",
+      "Effect": "Deny",
+      "Action": "Update:*",
+      "Principal": "*",
+      "Resource": [
+        "LogicalResourceId/ArtifactsBucket",
+        "LogicalResourceId/ArtifactsBucketPolicy",
+        "LogicalResourceId/AppLogGroup"
+      ]
+    }
+  ]
+}

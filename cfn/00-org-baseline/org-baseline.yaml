@@ -1,0 +1,92 @@
+# author: TGibson
+# creation date: 2025-08-26
+# CloudFormation YAML Template
+# job title: org-baseline
+AWSTemplateFormatVersion: "2010-09-09"
+    Description: Organization/account baseline (Config, optional CloudTrail). Costs minimized by defaults.
+    Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, stage, prod]
+    Default: dev
+    Description: Deployment environment.
+  ProjectName:
+    Type: String
+    Default: CorePlatform
+    AllowedPattern: '^[a-zA-Z0-9\-]{1,32}$'
+    Description: Project short code (letters/digits/hyphen).
+  Owner:
+    Type: String
+    Default: tgibson@omgroup.example
+    Description: Service owner (email or team).
+  CostCenter:
+    Type: String
+    Default: CC-0000
+    AllowedPattern: '^[A-Za-z0-9\-]{1,32}$'
+    Description: Cost center or charge code.
+  DataClassification:
+    Type: String
+    Default: Internal
+    AllowedValues: [Public, Internal, Confidential, Restricted]
+    Description: Data classification level.
+Parameters:
+      CreateCloudTrail:
+        Type: String
+        AllowedValues: ["true","false"]
+        Default: "false"
+        Description: Create an account CloudTrail and log bucket.
+
+    Conditions:
+      DoTrail: !Equals [!Ref CreateCloudTrail, "true"]
+
+    Resources:
+    OrgBaseline:
+  Type: AWS::Logs::LogGroup
+  Properties:
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/OrgBaseline"
+    RetentionInDays: 30
+    Tags:
+      - Key: Project       ; Value: !Ref ProjectName
+      - Key: Environment   ; Value: !Ref Environment
+      - Key: Owner         ; Value: !Ref Owner
+      - Key: CostCenter    ; Value: !Ref CostCenter
+      - Key: DataClass     ; Value: !Ref DataClassification
+      - Key: Author        ; Value: "TGibson"
+
+
+      TrailBucket:
+        Condition: DoTrail
+        Type: AWS::S3::Bucket
+        Properties:
+          PublicAccessBlockConfiguration:
+            BlockPublicAcls: true
+            BlockPublicPolicy: true
+            IgnorePublicAcls: true
+            RestrictPublicBuckets: true
+          VersioningConfiguration: { Status: Enabled }
+          BucketEncryption:
+            ServerSideEncryptionConfiguration:
+              - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+          Tags:
+            - Key: Project       ; Value: !Ref ProjectName
+            - Key: Environment   ; Value: !Ref Environment
+            - Key: Owner         ; Value: !Ref Owner
+            - Key: CostCenter    ; Value: !Ref CostCenter
+            - Key: DataClass     ; Value: !Ref DataClassification
+            - Key: Author        ; Value: "TGibson"
+
+
+      Trail:
+        Condition: DoTrail
+        Type: AWS::CloudTrail::Trail
+        Properties:
+          IsLogging: true
+          S3BucketName: !Ref TrailBucket
+          IncludeGlobalServiceEvents: true
+          IsMultiRegionTrail: true
+
+    Outputs:
+      TrailBucketName:
+        Condition: DoTrail
+        Value: !Ref TrailBucket
+        Description: CloudTrail log bucket name.

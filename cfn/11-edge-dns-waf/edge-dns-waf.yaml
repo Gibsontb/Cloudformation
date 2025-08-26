@@ -1,0 +1,74 @@
+# author: TGibson
+# creation date: 2025-08-26
+# CloudFormation YAML Template
+# job title: edge-dns-waf
+AWSTemplateFormatVersion: "2010-09-09"
+    Description: Edge/DNS/WAF skeleton. Certs require domain ownership (DNS validation).
+    Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, stage, prod]
+    Default: dev
+    Description: Deployment environment.
+  ProjectName:
+    Type: String
+    Default: CorePlatform
+    AllowedPattern: '^[a-zA-Z0-9\-]{1,32}$'
+    Description: Project short code (letters/digits/hyphen).
+  Owner:
+    Type: String
+    Default: tgibson@omgroup.example
+    Description: Service owner (email or team).
+  CostCenter:
+    Type: String
+    Default: CC-0000
+    AllowedPattern: '^[A-Za-z0-9\-]{1,32}$'
+    Description: Cost center or charge code.
+  DataClassification:
+    Type: String
+    Default: Internal
+    AllowedValues: [Public, Internal, Confidential, Restricted]
+    Description: Data classification level.
+Parameters:
+      DomainName:
+        Type: String
+        Default: example.com
+      CreateHostedZone:
+        Type: String
+        AllowedValues: ["true","false"]
+        Default: "false"
+
+    Conditions:
+      DoZone: !Equals [!Ref CreateHostedZone, "true"]
+
+    Resources:
+    EdgeDnsWaf:
+  Type: AWS::Logs::LogGroup
+  Properties:
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/EdgeDnsWaf"
+    RetentionInDays: 30
+    Tags:
+      - Key: Project       ; Value: !Ref ProjectName
+      - Key: Environment   ; Value: !Ref Environment
+      - Key: Owner         ; Value: !Ref Owner
+      - Key: CostCenter    ; Value: !Ref CostCenter
+      - Key: DataClass     ; Value: !Ref DataClassification
+      - Key: Author        ; Value: "TGibson"
+
+
+      HostedZone:
+        Condition: DoZone
+        Type: AWS::Route53::HostedZone
+        Properties:
+          Name: !Ref DomainName
+
+      WafAcl:
+        Type: AWS::WAFv2::WebACL
+        Properties:
+          Name: !Sub "${ProjectName}-${Environment}-webacl"
+          Scope: REGIONAL
+          DefaultAction: { Allow: {} }
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "${ProjectName}-${Environment}-webacl"

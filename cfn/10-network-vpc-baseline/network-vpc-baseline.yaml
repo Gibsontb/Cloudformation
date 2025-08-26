@@ -1,0 +1,138 @@
+# author: TGibson
+# creation date: 2025-08-26
+# CloudFormation YAML Template
+# job title: network-vpc-baseline
+AWSTemplateFormatVersion: "2010-09-09"
+    Description: VPC baseline (no-NAT by default to avoid cost). Add NAT via parameter.
+    Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, stage, prod]
+    Default: dev
+    Description: Deployment environment.
+  ProjectName:
+    Type: String
+    Default: CorePlatform
+    AllowedPattern: '^[a-zA-Z0-9\-]{1,32}$'
+    Description: Project short code (letters/digits/hyphen).
+  Owner:
+    Type: String
+    Default: tgibson@omgroup.example
+    Description: Service owner (email or team).
+  CostCenter:
+    Type: String
+    Default: CC-0000
+    AllowedPattern: '^[A-Za-z0-9\-]{1,32}$'
+    Description: Cost center or charge code.
+  DataClassification:
+    Type: String
+    Default: Internal
+    AllowedValues: [Public, Internal, Confidential, Restricted]
+    Description: Data classification level.
+Parameters:
+      CidrBlock:
+        Type: String
+        Default: 10.20.0.0/16
+      CreateNatGateway:
+        Type: String
+        AllowedValues: ["true","false"]
+        Default: "false"
+
+    Conditions:
+      DoNat: !Equals [!Ref CreateNatGateway, "true"]
+
+    Resources:
+      VPC:
+        Type: AWS::EC2::VPC
+        Properties:
+          CidrBlock: !Ref CidrBlock
+          EnableDnsHostnames: true
+          EnableDnsSupport: true
+          Tags:
+            - Key: Project       ; Value: !Ref ProjectName
+            - Key: Environment   ; Value: !Ref Environment
+            - Key: Owner         ; Value: !Ref Owner
+            - Key: CostCenter    ; Value: !Ref CostCenter
+            - Key: DataClass     ; Value: !Ref DataClassification
+            - Key: Author        ; Value: "TGibson"
+
+
+      IGW:
+        Type: AWS::EC2::InternetGateway
+
+      IGWAttach:
+        Type: AWS::EC2::VPCGatewayAttachment
+        Properties:
+          InternetGatewayId: !Ref IGW
+          VpcId: !Ref VPC
+
+      PublicSubnetA:
+        Type: AWS::EC2::Subnet
+        Properties:
+          VpcId: !Ref VPC
+          AvailabilityZone: !Select [0, !GetAZs ""]
+          CidrBlock: 10.20.0.0/24
+          MapPublicIpOnLaunch: true
+          Tags:
+            - Key: Name ; Value: !Sub "${ProjectName}-${Environment}-public-a"
+            - Key: Project       ; Value: !Ref ProjectName
+            - Key: Environment   ; Value: !Ref Environment
+            - Key: Owner         ; Value: !Ref Owner
+            - Key: CostCenter    ; Value: !Ref CostCenter
+            - Key: DataClass     ; Value: !Ref DataClassification
+            - Key: Author        ; Value: "TGibson"
+
+
+      PublicRouteTable:
+        Type: AWS::EC2::RouteTable
+        Properties:
+          VpcId: !Ref VPC
+
+      PublicRoute:
+        Type: AWS::EC2::Route
+        Properties:
+          RouteTableId: !Ref PublicRouteTable
+          DestinationCidrBlock: 0.0.0.0/0
+          GatewayId: !Ref IGW
+
+      PublicSubnetARouteAssoc:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+          SubnetId: !Ref PublicSubnetA
+          RouteTableId: !Ref PublicRouteTable
+
+      FlowLogs:
+        Type: AWS::EC2::FlowLog
+        Properties:
+          ResourceId: !Ref VPC
+          ResourceType: VPC
+          TrafficType: ALL
+          LogDestinationType: cloud-watch-logs
+          LogGroupName: !Sub "/${ProjectName}/${Environment}/vpc-flow"
+          DeliverLogsPermissionArn: !GetAtt FlowLogsRole.Arn
+
+      FlowLogsRole:
+        Type: AWS::IAM::Role
+        Properties:
+          AssumeRolePolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Principal: { Service: vpc-flow-logs.amazonaws.com }
+                Action: "sts:AssumeRole"
+          Policies:
+            - PolicyName: cw-logs
+              PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                  - Effect: Allow
+                    Action:
+                      - logs:CreateLogGroup
+                      - logs:CreateLogStream
+                      - logs:PutLogEvents
+                      - logs:DescribeLogGroups
+                    Resource: "*"
+
+    Outputs:
+      VpcId: { Value: !Ref VPC, Export: { Name: !Sub "${AWS::StackName}-VpcId" } }
+      PublicSubnetAId: { Value: !Ref PublicSubnetA }

@@ -1,0 +1,93 @@
+# author: TGibson
+# creation date: 2025-08-26
+# CloudFormation YAML Template
+# job title: backup-and-dr
+AWSTemplateFormatVersion: "2010-09-09"
+    Description: AWS Backup vault and plan (tag-based selection).
+    Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, stage, prod]
+    Default: dev
+    Description: Deployment environment.
+  ProjectName:
+    Type: String
+    Default: CorePlatform
+    AllowedPattern: '^[a-zA-Z0-9\-]{1,32}$'
+    Description: Project short code (letters/digits/hyphen).
+  Owner:
+    Type: String
+    Default: tgibson@omgroup.example
+    Description: Service owner (email or team).
+  CostCenter:
+    Type: String
+    Default: CC-0000
+    AllowedPattern: '^[A-Za-z0-9\-]{1,32}$'
+    Description: Cost center or charge code.
+  DataClassification:
+    Type: String
+    Default: Internal
+    AllowedValues: [Public, Internal, Confidential, Restricted]
+    Description: Data classification level.
+Parameters:
+      SelectionTagKey:
+        Type: String
+        Default: Backup
+      SelectionTagValue:
+        Type: String
+        Default: true
+
+    Resources:
+    Backup:
+  Type: AWS::Logs::LogGroup
+  Properties:
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/Backup"
+    RetentionInDays: 30
+    Tags:
+      - Key: Project       ; Value: !Ref ProjectName
+      - Key: Environment   ; Value: !Ref Environment
+      - Key: Owner         ; Value: !Ref Owner
+      - Key: CostCenter    ; Value: !Ref CostCenter
+      - Key: DataClass     ; Value: !Ref DataClassification
+      - Key: Author        ; Value: "TGibson"
+
+
+      Vault:
+        Type: AWS::Backup::BackupVault
+        Properties:
+          BackupVaultName: !Sub "${ProjectName}-${Environment}-vault"
+
+      Plan:
+        Type: AWS::Backup::BackupPlan
+        Properties:
+          BackupPlan:
+            BackupPlanName: !Sub "${ProjectName}-${Environment}-plan"
+            Rules:
+              - RuleName: daily-35d
+                TargetBackupVault: !Ref Vault
+                ScheduleExpression: cron(0 5 * * ? *)
+                Lifecycle: { DeleteAfterDays: 35 }
+
+      Selection:
+        Type: AWS::Backup::BackupSelection
+        Properties:
+          BackupSelection:
+            SelectionName: tag-selection
+            IamRoleArn: !GetAtt BackupRole.Arn
+            ListOfTags:
+              - ConditionType: STRINGEQUALS
+                ConditionKey: !Ref SelectionTagKey
+                ConditionValue: !Ref SelectionTagValue
+          BackupPlanId: !Ref Plan
+
+      BackupRole:
+        Type: AWS::IAM::Role
+        Properties:
+          AssumeRolePolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Principal: { Service: backup.amazonaws.com }
+                Action: "sts:AssumeRole"
+          ManagedPolicyArns:
+            - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup

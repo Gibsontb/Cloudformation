@@ -1,0 +1,70 @@
+# author: TGibson
+# creation date: 2025-08-26
+# CloudFormation YAML Template
+# job title: guardrails-sec-hub
+AWSTemplateFormatVersion: "2010-09-09"
+    Description: Guardrails skeleton (SecurityHub/GuardDuty) off by default.
+    Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, stage, prod]
+    Default: dev
+    Description: Deployment environment.
+  ProjectName:
+    Type: String
+    Default: CorePlatform
+    AllowedPattern: '^[a-zA-Z0-9\-]{1,32}$'
+    Description: Project short code (letters/digits/hyphen).
+  Owner:
+    Type: String
+    Default: tgibson@omgroup.example
+    Description: Service owner (email or team).
+  CostCenter:
+    Type: String
+    Default: CC-0000
+    AllowedPattern: '^[A-Za-z0-9\-]{1,32}$'
+    Description: Cost center or charge code.
+  DataClassification:
+    Type: String
+    Default: Internal
+    AllowedValues: [Public, Internal, Confidential, Restricted]
+    Description: Data classification level.
+Parameters:
+      EnableGuardDuty:
+        Type: String
+        AllowedValues: ["true","false"]
+        Default: "false"
+      EnableSecurityHub:
+        Type: String
+        AllowedValues: ["true","false"]
+        Default: "false"
+
+    Conditions:
+      DoGd: !Equals [!Ref EnableGuardDuty, "true"]
+      DoSh: !Equals [!Ref EnableSecurityHub, "true"]
+
+    Resources:
+    Guardrails:
+  Type: AWS::Logs::LogGroup
+  Properties:
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/Guardrails"
+    RetentionInDays: 30
+    Tags:
+      - Key: Project       ; Value: !Ref ProjectName
+      - Key: Environment   ; Value: !Ref Environment
+      - Key: Owner         ; Value: !Ref Owner
+      - Key: CostCenter    ; Value: !Ref CostCenter
+      - Key: DataClass     ; Value: !Ref DataClassification
+      - Key: Author        ; Value: "TGibson"
+
+
+      GdDetector:
+        Condition: DoGd
+        Type: AWS::GuardDuty::Detector
+        Properties:
+          Enable: true
+
+      SecHub:
+        Condition: DoSh
+        Type: AWS::SecurityHub::Hub
+        Properties: {}
