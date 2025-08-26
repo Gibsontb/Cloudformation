@@ -1,0 +1,8 @@
+// Enforce encryption and block public access on S3 buckets
+rule s3_encrypted when resources.*[ Type == "AWS::S3::Bucket" ] {
+  Properties.BucketEncryption exists
+  Properties.PublicAccessBlockConfiguration.BlockPublicAcls == true
+  Properties.PublicAccessBlockConfiguration.BlockPublicPolicy == true
+  Properties.PublicAccessBlockConfiguration.IgnorePublicAcls == true
+  Properties.PublicAccessBlockConfiguration.RestrictPublicBuckets == true
+}

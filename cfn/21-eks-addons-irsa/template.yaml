@@ -1,9 +1,11 @@
-# author: TGibson
-# creation date: 2025-08-26
-# CloudFormation YAML Template
-# job title: edge-dns-waf
+# Author: TGibson
+# Job Title: Cloud Architect
+# Creation Date: 2025-08-26
+# File Type: Cloudformation YAML Template
+# Job Name: eks-addons-irsa
+
 AWSTemplateFormatVersion: "2010-09-09"
-    Description: Edge/DNS/WAF skeleton. Certs require domain ownership (DNS validation).
+    Description: EKS addons (VPC CNI/CoreDNS/kube-proxy) skeleton.
     Parameters:
   Environment:
     Type: String
@@ -30,22 +32,21 @@ AWSTemplateFormatVersion: "2010-09-09"
     AllowedValues: [Public, Internal, Confidential, Restricted]
     Description: Data classification level.
 Parameters:
-      DomainName:
+      ClusterName:
         Type: String
-        Default: example.com
-      CreateHostedZone:
+      CreateAddons:
         Type: String
         AllowedValues: ["true","false"]
         Default: "false"
 
     Conditions:
-      DoZone: !Equals [!Ref CreateHostedZone, "true"]
+      DoAddons: !Equals [!Ref CreateAddons, "true"]
 
     Resources:
-    EdgeDnsWaf:
+    EksAddons:
   Type: AWS::Logs::LogGroup
   Properties:
-    LogGroupName: !Sub "/${ProjectName}/${Environment}/EdgeDnsWaf"
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/EksAddons"
     RetentionInDays: 30
     Tags:
       - Key: Project       ; Value: !Ref ProjectName
@@ -56,19 +57,21 @@ Parameters:
       - Key: Author        ; Value: "TGibson"
 
 
-      HostedZone:
-        Condition: DoZone
-        Type: AWS::Route53::HostedZone
+      VpcCni:
+        Condition: DoAddons
+        Type: AWS::EKS::Addon
         Properties:
-          Name: !Ref DomainName
-
-      WafAcl:
-        Type: AWS::WAFv2::WebACL
+          AddonName: vpc-cni
+          ClusterName: !Ref ClusterName
+      CoreDNS:
+        Condition: DoAddons
+        Type: AWS::EKS::Addon
         Properties:
-          Name: !Sub "${ProjectName}-${Environment}-webacl"
-          Scope: REGIONAL
-          DefaultAction: { Allow: {} }
-          VisibilityConfig:
-            SampledRequestsEnabled: true
-            CloudWatchMetricsEnabled: true
-            MetricName: !Sub "${ProjectName}-${Environment}-webacl"
+          AddonName: coredns
+          ClusterName: !Ref ClusterName
+      KubeProxy:
+        Condition: DoAddons
+        Type: AWS::EKS::Addon
+        Properties:
+          AddonName: kube-proxy
+          ClusterName: !Ref ClusterName

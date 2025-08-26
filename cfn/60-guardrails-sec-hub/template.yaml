@@ -1,9 +1,11 @@
-# author: TGibson
-# creation date: 2025-08-26
-# CloudFormation YAML Template
-# job title: image-build-ecr
+# Author: TGibson
+# Job Title: Cloud Architect
+# Creation Date: 2025-08-26
+# File Type: Cloudformation YAML Template
+# Job Name: guardrails-sec-hub
+
 AWSTemplateFormatVersion: "2010-09-09"
-    Description: ECR repository with scan on push and lifecycle policy.
+    Description: Guardrails skeleton (SecurityHub/GuardDuty) off by default.
     Parameters:
   Environment:
     Type: String
@@ -29,11 +31,25 @@ AWSTemplateFormatVersion: "2010-09-09"
     Default: Internal
     AllowedValues: [Public, Internal, Confidential, Restricted]
     Description: Data classification level.
-Resources:
-    EcrRepo:
+Parameters:
+      EnableGuardDuty:
+        Type: String
+        AllowedValues: ["true","false"]
+        Default: "false"
+      EnableSecurityHub:
+        Type: String
+        AllowedValues: ["true","false"]
+        Default: "false"
+
+    Conditions:
+      DoGd: !Equals [!Ref EnableGuardDuty, "true"]
+      DoSh: !Equals [!Ref EnableSecurityHub, "true"]
+
+    Resources:
+    Guardrails:
   Type: AWS::Logs::LogGroup
   Properties:
-    LogGroupName: !Sub "/${ProjectName}/${Environment}/EcrRepo"
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/Guardrails"
     RetentionInDays: 30
     Tags:
       - Key: Project       ; Value: !Ref ProjectName
@@ -44,11 +60,13 @@ Resources:
       - Key: Author        ; Value: "TGibson"
 
 
-      Repo:
-        Type: AWS::ECR::Repository
+      GdDetector:
+        Condition: DoGd
+        Type: AWS::GuardDuty::Detector
         Properties:
-          RepositoryName: !Sub "${ProjectName}-${Environment}"
-          ImageScanningConfiguration: { ScanOnPush: true }
-          LifecyclePolicy:
-            LifecyclePolicyText: |
-              {"rules":[{"rulePriority":1,"description":"Keep last 20","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":20},"action":{"type":"expire"}}]}
+          Enable: true
+
+      SecHub:
+        Condition: DoSh
+        Type: AWS::SecurityHub::Hub
+        Properties: {}

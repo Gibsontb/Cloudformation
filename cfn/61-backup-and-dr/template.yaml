@@ -1,7 +1,9 @@
-# author: TGibson
-# creation date: 2025-08-26
-# CloudFormation YAML Template
-# job title: backup-and-dr
+# Author: TGibson
+# Job Title: Cloud Architect
+# Creation Date: 2025-08-26
+# File Type: Cloudformation YAML Template
+# Job Name: backup-and-dr
+
 AWSTemplateFormatVersion: "2010-09-09"
     Description: AWS Backup vault and plan (tag-based selection).
     Parameters:

@@ -1,0 +1,4 @@
+// CloudWatch LogGroup must set retention
+rule loggroup_retention when resources.*[ Type == "AWS::Logs::LogGroup" ] {
+  Properties.RetentionInDays exists
+}

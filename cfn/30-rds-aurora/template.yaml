@@ -1,9 +1,11 @@
-# author: TGibson
-# creation date: 2025-08-26
-# CloudFormation YAML Template
-# job title: eks-addons-irsa
+# Author: TGibson
+# Job Title: Cloud Architect
+# Creation Date: 2025-08-26
+# File Type: Cloudformation YAML Template
+# Job Name: rds-aurora
+
 AWSTemplateFormatVersion: "2010-09-09"
-    Description: EKS addons (VPC CNI/CoreDNS/kube-proxy) skeleton.
+    Description: RDS/Aurora skeleton (off by default).
     Parameters:
   Environment:
     Type: String
@@ -30,21 +32,21 @@ AWSTemplateFormatVersion: "2010-09-09"
     AllowedValues: [Public, Internal, Confidential, Restricted]
     Description: Data classification level.
 Parameters:
-      ClusterName:
-        Type: String
-      CreateAddons:
+      SubnetIds:
+        Type: List<AWS::EC2::Subnet::Id>
+      CreateAurora:
         Type: String
         AllowedValues: ["true","false"]
         Default: "false"
 
     Conditions:
-      DoAddons: !Equals [!Ref CreateAddons, "true"]
+      DoAurora: !Equals [!Ref CreateAurora, "true"]
 
     Resources:
-    EksAddons:
+    RdsAurora:
   Type: AWS::Logs::LogGroup
   Properties:
-    LogGroupName: !Sub "/${ProjectName}/${Environment}/EksAddons"
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/RdsAurora"
     RetentionInDays: 30
     Tags:
       - Key: Project       ; Value: !Ref ProjectName
@@ -55,21 +57,18 @@ Parameters:
       - Key: Author        ; Value: "TGibson"
 
 
-      VpcCni:
-        Condition: DoAddons
-        Type: AWS::EKS::Addon
+      DbSubnets:
+        Type: AWS::RDS::DBSubnetGroup
         Properties:
-          AddonName: vpc-cni
-          ClusterName: !Ref ClusterName
-      CoreDNS:
-        Condition: DoAddons
-        Type: AWS::EKS::Addon
+          DBSubnetGroupDescription: "App DB subnets"
+          SubnetIds: !Ref SubnetIds
+
+      AuroraCluster:
+        Condition: DoAurora
+        Type: AWS::RDS::DBCluster
         Properties:
-          AddonName: coredns
-          ClusterName: !Ref ClusterName
-      KubeProxy:
-        Condition: DoAddons
-        Type: AWS::EKS::Addon
-        Properties:
-          AddonName: kube-proxy
-          ClusterName: !Ref ClusterName
+          Engine: aurora-mysql
+          EngineMode: provisioned
+          DBSubnetGroupName: !Ref DbSubnets
+          DeletionProtection: true
+          StorageEncrypted: true

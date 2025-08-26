@@ -1,0 +1,98 @@
+# Author: TGibson
+# Job Title: Cloud Architect
+# Creation Date: 2025-08-26
+# File Type: Cloudformation YAML Template
+# Job Name: sample-workload-alb-asg
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Minimal ALB + ASG workload (disabled by default to avoid cost).
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, stage, prod]
+    Default: dev
+  ProjectName:
+    Type: String
+    Default: WebApp
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+  CreateWorkload:
+    Type: String
+    AllowedValues: ["true","false"]
+    Default: "false"
+
+Conditions:
+  DoIt: !Equals [!Ref CreateWorkload, "true"]
+
+Resources:
+  AlbSG:
+    Condition: DoIt
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB SG
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  Alb:
+    Condition: DoIt
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets: !Ref SubnetIds
+      SecurityGroups: [!Ref AlbSG]
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: "true"
+
+  TG:
+    Condition: DoIt
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      TargetType: instance
+      HealthCheckPath: /
+
+  Listener:
+    Condition: DoIt
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TG
+
+  LaunchTemplate:
+    Condition: DoIt
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: ami-0c02fb55956c7d316
+        InstanceType: t3.micro
+        UserData:
+          Fn::Base64: |
+            #!/bin/bash
+            yum install -y httpd
+            echo "ok $(date)" > /var/www/html/index.html
+            systemctl enable --now httpd
+
+  ASG:
+    Condition: DoIt
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier: !Ref SubnetIds
+      MinSize: "1"
+      MaxSize: "2"
+      DesiredCapacity: "1"
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      TargetGroupARNs: [!Ref TG]

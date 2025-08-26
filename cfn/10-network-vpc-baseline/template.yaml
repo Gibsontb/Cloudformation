@@ -1,7 +1,9 @@
-# author: TGibson
-# creation date: 2025-08-26
-# CloudFormation YAML Template
-# job title: network-vpc-baseline
+# Author: TGibson
+# Job Title: Cloud Architect
+# Creation Date: 2025-08-26
+# File Type: Cloudformation YAML Template
+# Job Name: network-vpc-baseline
+
 AWSTemplateFormatVersion: "2010-09-09"
     Description: VPC baseline (no-NAT by default to avoid cost). Add NAT via parameter.
     Parameters:

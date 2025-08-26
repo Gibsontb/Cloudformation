@@ -1,0 +1,8 @@
+extends: default
+
+rules:
+  line-length: { max: 140 }
+  truthy:
+    allowed-values: ['true','false','on','off','yes','no']
+  indentation:
+    indent-sequences: false

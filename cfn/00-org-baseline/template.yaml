@@ -1,7 +1,9 @@
-# author: TGibson
-# creation date: 2025-08-26
-# CloudFormation YAML Template
-# job title: org-baseline
+# Author: TGibson
+# Job Title: Cloud Architect
+# Creation Date: 2025-08-26
+# File Type: Cloudformation YAML Template
+# Job Name: org-baseline
+
 AWSTemplateFormatVersion: "2010-09-09"
     Description: Organization/account baseline (Config, optional CloudTrail). Costs minimized by defaults.
     Parameters:

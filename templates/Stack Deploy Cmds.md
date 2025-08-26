@@ -1,34 +1,48 @@
+\# Author: TGibson
+
+\# Job Title: Cloud Architect
+
+\# Creation Date: 2025-08-26
+
+\# File Type: Cloudformation YAML Template
+
+\# Job Name: Stack Deploy Cmds
+
+
+
+
+
 \# create
 
 aws cloudformation create-stack \\
 
-&nbsp; --stack-name core-enterprise \\
+  --stack-name core-enterprise \\
 
-&nbsp; --template-body file://enterprise-template.yml \\
+  --template-body file://enterprise-template.yml \\
 
-&nbsp; --capabilities CAPABILITY\_NAMED\_IAM \\
+  --capabilities CAPABILITY\_NAMED\_IAM \\
 
-&nbsp; --stack-policy-body file://stack-policy.json \\
+  --stack-policy-body file://stack-policy.json \\
 
-&nbsp; --parameters \\
+  --parameters \\
 
-&nbsp;     ParameterKey=Environment,ParameterValue=dev \\
+      ParameterKey=Environment,ParameterValue=dev \\
 
-&nbsp;     ParameterKey=ProjectName,ParameterValue=ZeroTrustSaaS \\
+      ParameterKey=ProjectName,ParameterValue=ZeroTrustSaaS \\
 
-&nbsp;     ParameterKey=Owner,ParameterValue=gibsontbc@gmail.com \\
+      ParameterKey=Owner,ParameterValue=gibsontbc@gmail.com \\
 
-&nbsp;     ParameterKey=CostCenter,ParameterValue=CC-1234 \\
+      ParameterKey=CostCenter,ParameterValue=CC-1234 \\
 
-&nbsp;     ParameterKey=DataClassification,ParameterValue=Internal \\
+      ParameterKey=DataClassification,ParameterValue=Internal \\
 
-&nbsp;     ParameterKey=VpcId,ParameterValue=vpc-xxxxxxxx \\
+      ParameterKey=VpcId,ParameterValue=vpc-xxxxxxxx \\
 
-&nbsp;     ParameterKey=SubnetIds,ParameterValue='subnet-aaa,subnet-bbb' \\
+      ParameterKey=SubnetIds,ParameterValue='subnet-aaa,subnet-bbb' \\
 
-&nbsp;     ParameterKey=EnableKms,ParameterValue=false \\
+      ParameterKey=EnableKms,ParameterValue=false \\
 
-&nbsp;     ParameterKey=S3SseMode,ParameterValue=SSE-S3
+      ParameterKey=S3SseMode,ParameterValue=SSE-S3
 
 
 
@@ -36,13 +50,11 @@ aws cloudformation create-stack \\
 
 aws cloudformation update-stack \\
 
-&nbsp; --stack-name core-enterprise \\
+  --stack-name core-enterprise \\
 
-&nbsp; --template-body file://enterprise-template.yaml \\
+  --template-body file://enterprise-template.yaml \\
 
-&nbsp; --capabilities CAPABILITY\_NAMED\_IAM \\
+  --capabilities CAPABILITY\_NAMED\_IAM \\
 
-&nbsp; --stack-policy-body file://stack-policy.json
-
-
+  --stack-policy-body file://stack-policy.json
 

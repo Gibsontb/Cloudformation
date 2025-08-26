@@ -1,9 +1,11 @@
-# author: TGibson
-# creation date: 2025-08-26
-# CloudFormation YAML Template
-# job title: rds-aurora
+# Author: TGibson
+# Job Title: Cloud Architect
+# Creation Date: 2025-08-26
+# File Type: Cloudformation YAML Template
+# Job Name: eks-cluster
+
 AWSTemplateFormatVersion: "2010-09-09"
-    Description: RDS/Aurora skeleton (off by default).
+    Description: EKS cluster skeleton (creation disabled by default to avoid cost).
     Parameters:
   Environment:
     Type: String
@@ -32,19 +34,20 @@ AWSTemplateFormatVersion: "2010-09-09"
 Parameters:
       SubnetIds:
         Type: List<AWS::EC2::Subnet::Id>
-      CreateAurora:
+        Description: Private subnet IDs for EKS.
+      CreateEKS:
         Type: String
         AllowedValues: ["true","false"]
         Default: "false"
 
     Conditions:
-      DoAurora: !Equals [!Ref CreateAurora, "true"]
+      DoEKS: !Equals [!Ref CreateEKS, "true"]
 
     Resources:
-    RdsAurora:
+    EksCluster:
   Type: AWS::Logs::LogGroup
   Properties:
-    LogGroupName: !Sub "/${ProjectName}/${Environment}/RdsAurora"
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/EksCluster"
     RetentionInDays: 30
     Tags:
       - Key: Project       ; Value: !Ref ProjectName
@@ -55,18 +58,23 @@ Parameters:
       - Key: Author        ; Value: "TGibson"
 
 
-      DbSubnets:
-        Type: AWS::RDS::DBSubnetGroup
+      EksRole:
+        Type: AWS::IAM::Role
         Properties:
-          DBSubnetGroupDescription: "App DB subnets"
-          SubnetIds: !Ref SubnetIds
+          AssumeRolePolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Principal: { Service: eks.amazonaws.com }
+                Action: "sts:AssumeRole"
+          ManagedPolicyArns:
+            - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
 
-      AuroraCluster:
-        Condition: DoAurora
-        Type: AWS::RDS::DBCluster
+      EksCluster:
+        Condition: DoEKS
+        Type: AWS::EKS::Cluster
         Properties:
-          Engine: aurora-mysql
-          EngineMode: provisioned
-          DBSubnetGroupName: !Ref DbSubnets
-          DeletionProtection: true
-          StorageEncrypted: true
+          Name: !Sub "${ProjectName}-${Environment}"
+          RoleArn: !GetAtt EksRole.Arn
+          ResourcesVpcConfig:
+            SubnetIds: !Ref SubnetIds

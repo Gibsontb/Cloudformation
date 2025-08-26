@@ -1,0 +1,40 @@
+name: cfn-validate
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install linters
+        run: |
+          pip install cfn-lint yamllint
+          curl -L -o cfn-guard.zip https://github.com/aws-cloudformation/cloudformation-guard/releases/latest/download/cfn-guard-linux-x86_64.zip
+          sudo apt-get update && sudo apt-get install -y unzip
+          unzip -o cfn-guard.zip -d /usr/local/bin
+          chmod +x /usr/local/bin/cfn-guard* || true
+
+      - name: YAML lint
+        run: |
+          yamllint -c .yamllint .
+
+      - name: CFN lint
+        run: |
+          cfn-lint -c .cfnlintrc -i W3002,W2001 $(git ls-files 'cfn/**/*.yaml')
+
+      - name: CFN Guard (selected templates)
+        run: |
+          for t in $(git ls-files 'cfn/**/*.yaml'); do
+            echo "Checking $t"
+            cfn-guard validate -r guard/ -d "$t" || exit 1
+          done

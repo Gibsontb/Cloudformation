@@ -1,0 +1,6 @@
+templates:
+  - cfn/**/*.yaml
+
+ignore_checks:
+  - W3011  # Parameter default not recommended (allowed for starter templates)
+  - W2001  # Parameter without description (handled in most, but allow in samples)

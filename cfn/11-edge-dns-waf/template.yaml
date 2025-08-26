@@ -1,9 +1,11 @@
-# author: TGibson
-# creation date: 2025-08-26
-# CloudFormation YAML Template
-# job title: guardrails-sec-hub
+# Author: TGibson
+# Job Title: Cloud Architect
+# Creation Date: 2025-08-26
+# File Type: Cloudformation YAML Template
+# Job Name: edge-dns-waf
+
 AWSTemplateFormatVersion: "2010-09-09"
-    Description: Guardrails skeleton (SecurityHub/GuardDuty) off by default.
+    Description: Edge/DNS/WAF skeleton. Certs require domain ownership (DNS validation).
     Parameters:
   Environment:
     Type: String
@@ -30,24 +32,22 @@ AWSTemplateFormatVersion: "2010-09-09"
     AllowedValues: [Public, Internal, Confidential, Restricted]
     Description: Data classification level.
 Parameters:
-      EnableGuardDuty:
+      DomainName:
         Type: String
-        AllowedValues: ["true","false"]
-        Default: "false"
-      EnableSecurityHub:
+        Default: example.com
+      CreateHostedZone:
         Type: String
         AllowedValues: ["true","false"]
         Default: "false"
 
     Conditions:
-      DoGd: !Equals [!Ref EnableGuardDuty, "true"]
-      DoSh: !Equals [!Ref EnableSecurityHub, "true"]
+      DoZone: !Equals [!Ref CreateHostedZone, "true"]
 
     Resources:
-    Guardrails:
+    EdgeDnsWaf:
   Type: AWS::Logs::LogGroup
   Properties:
-    LogGroupName: !Sub "/${ProjectName}/${Environment}/Guardrails"
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/EdgeDnsWaf"
     RetentionInDays: 30
     Tags:
       - Key: Project       ; Value: !Ref ProjectName
@@ -58,13 +58,19 @@ Parameters:
       - Key: Author        ; Value: "TGibson"
 
 
-      GdDetector:
-        Condition: DoGd
-        Type: AWS::GuardDuty::Detector
+      HostedZone:
+        Condition: DoZone
+        Type: AWS::Route53::HostedZone
         Properties:
-          Enable: true
+          Name: !Ref DomainName
 
-      SecHub:
-        Condition: DoSh
-        Type: AWS::SecurityHub::Hub
-        Properties: {}
+      WafAcl:
+        Type: AWS::WAFv2::WebACL
+        Properties:
+          Name: !Sub "${ProjectName}-${Environment}-webacl"
+          Scope: REGIONAL
+          DefaultAction: { Allow: {} }
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "${ProjectName}-${Environment}-webacl"

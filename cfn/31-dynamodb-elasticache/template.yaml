@@ -1,9 +1,11 @@
-# author: TGibson
-# creation date: 2025-08-26
-# CloudFormation YAML Template
-# job title: eks-cluster
+# Author: TGibson
+# Job Title: Cloud Architect
+# Creation Date: 2025-08-26
+# File Type: Cloudformation YAML Template
+# Job Name: dynamodb-elasticache
+
 AWSTemplateFormatVersion: "2010-09-09"
-    Description: EKS cluster skeleton (creation disabled by default to avoid cost).
+    Description: DynamoDB and ElastiCache skeleton (off by default).
     Parameters:
   Environment:
     Type: String
@@ -30,22 +32,24 @@ AWSTemplateFormatVersion: "2010-09-09"
     AllowedValues: [Public, Internal, Confidential, Restricted]
     Description: Data classification level.
 Parameters:
-      SubnetIds:
-        Type: List<AWS::EC2::Subnet::Id>
-        Description: Private subnet IDs for EKS.
-      CreateEKS:
+      CreateDynamo:
+        Type: String
+        AllowedValues: ["true","false"]
+        Default: "false"
+      CreateRedis:
         Type: String
         AllowedValues: ["true","false"]
         Default: "false"
 
     Conditions:
-      DoEKS: !Equals [!Ref CreateEKS, "true"]
+      DoDynamo: !Equals [!Ref CreateDynamo, "true"]
+      DoRedis: !Equals [!Ref CreateRedis, "true"]
 
     Resources:
-    EksCluster:
+    DataNoSqlCache:
   Type: AWS::Logs::LogGroup
   Properties:
-    LogGroupName: !Sub "/${ProjectName}/${Environment}/EksCluster"
+    LogGroupName: !Sub "/${ProjectName}/${Environment}/DataNoSqlCache"
     RetentionInDays: 30
     Tags:
       - Key: Project       ; Value: !Ref ProjectName
@@ -56,23 +60,23 @@ Parameters:
       - Key: Author        ; Value: "TGibson"
 
 
-      EksRole:
-        Type: AWS::IAM::Role
+      Table:
+        Condition: DoDynamo
+        Type: AWS::DynamoDB::Table
         Properties:
-          AssumeRolePolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Principal: { Service: eks.amazonaws.com }
-                Action: "sts:AssumeRole"
-          ManagedPolicyArns:
-            - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+          BillingMode: PAY_PER_REQUEST
+          KeySchema: [{ AttributeName: id, KeyType: HASH }]
+          AttributeDefinitions: [{ AttributeName: id, AttributeType: S }]
+          SSESpecification: { SSEEnabled: true }
 
-      EksCluster:
-        Condition: DoEKS
-        Type: AWS::EKS::Cluster
+      Redis:
+        Condition: DoRedis
+        Type: AWS::ElastiCache::ReplicationGroup
         Properties:
-          Name: !Sub "${ProjectName}-${Environment}"
-          RoleArn: !GetAtt EksRole.Arn
-          ResourcesVpcConfig:
-            SubnetIds: !Ref SubnetIds
+          Engine: redis
+          CacheNodeType: cache.t3.micro
+          NumNodeGroups: 1
+          ReplicasPerNodeGroup: 0
+          AutomaticFailoverEnabled: false
+          AtRestEncryptionEnabled: true
+          TransitEncryptionEnabled: true
